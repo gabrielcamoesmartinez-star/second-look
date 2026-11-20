@@ -1,0 +1,46 @@
+import { z } from 'zod';
+
+export const ErrorCode = z.enum([
+  'invalid_url',
+  'ssrf_blocked',
+  'dns_failed',
+  'blocked_by_robots',
+  'fetch_timeout',
+  'fetch_failed',
+  'http_error',
+  'too_many_redirects',
+  'page_too_large',
+  'quota_exceeded',
+  'ip_rate_limited',
+  'ai_budget_reached',
+  'pagespeed_failed',
+  'cancelled',
+  'unauthorized',
+  'internal',
+]);
+export type ErrorCode = z.infer<typeof ErrorCode>;
+
+/** Plain-language copy plus the action the user can take. */
+export const ERROR_COPY: Record<ErrorCode, { message: string; action: string }> = {
+  invalid_url: { message: "That doesn't look like a website address.", action: 'Check the address and try again.' },
+  ssrf_blocked: { message: "That address isn't a public website.", action: 'Use the address people type into a browser.' },
+  dns_failed: { message: "We couldn't find that website.", action: 'Check the spelling of the domain.' },
+  blocked_by_robots: { message: "This site asks crawlers not to visit, so we can't audit it.", action: 'Ask the owner to allow SecondLookBot, or pick another site.' },
+  fetch_timeout: { message: 'The site took too long to respond. Try again.', action: 'Try again in a few minutes.' },
+  fetch_failed: { message: "We couldn't load that site.", action: 'Check the site opens in your browser, then try again.' },
+  http_error: { message: 'The site returned an error page.', action: 'Check the site opens in your browser, then try again.' },
+  too_many_redirects: { message: 'The site redirects too many times.', action: 'Try the final address the site lands on.' },
+  page_too_large: { message: 'The page is larger than 10 MB, so we stopped loading it.', action: 'Try a specific, lighter page of the site.' },
+  quota_exceeded: { message: "You've used today's audits. Try again tomorrow.", action: 'Your quota resets at midnight UTC.' },
+  ip_rate_limited: { message: 'Too many audits from this network today.', action: 'Try again tomorrow.' },
+  ai_budget_reached: { message: 'The AI check is paused for today; the other checks still ran.', action: 'Re-run tomorrow for the full checklist.' },
+  pagespeed_failed: { message: "Google PageSpeed didn't answer, so performance and accessibility weren't measured.", action: 'Re-run later to fill them in.' },
+  cancelled: { message: 'This audit was cancelled.', action: 'Run it again when you are ready.' },
+  unauthorized: { message: 'Please sign in again.', action: 'Sign in with your email.' },
+  internal: { message: 'Something went wrong on our side.', action: 'Try again. If it keeps happening, let us know.' },
+};
+
+export function errorCopy(code: string | null | undefined): { message: string; action: string } {
+  const parsed = ErrorCode.safeParse(code);
+  return parsed.success ? ERROR_COPY[parsed.data] : ERROR_COPY.internal;
+}

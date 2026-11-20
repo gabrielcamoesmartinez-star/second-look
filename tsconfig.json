@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "types": ["node"], "lib": ["ES2022", "DOM"] },
+  "include": ["tests/**/*.ts", "supabase/functions/_shared/*.ts", "supabase/functions/*/handler.ts"]
+}

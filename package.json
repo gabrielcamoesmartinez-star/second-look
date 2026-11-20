@@ -1,0 +1,29 @@
+{
+  "name": "second-look",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "build": "pnpm -r build",
+    "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm --filter @second-look/shared test && pnpm --filter @second-look/web test",
+    "test:integration": "pnpm --filter @second-look/worker test",
+    "test:db": "vitest run --root tests/db",
+    "check:secrets": "node scripts/check-bundle-secrets.mjs",
+    "test:functions": "vitest run tests/functions",
+    "check:functions-shared": "node scripts/sync-functions-shared.mjs --check"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "pg": "^8.13.1",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "zod": "^4.6.7",
+    "ipaddr.js": "^2.2.0"
+  }
+}

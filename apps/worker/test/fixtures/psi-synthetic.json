@@ -1,0 +1,107 @@
+{
+ "kind": "pagespeedonline#result",
+ "lighthouseResult": {
+  "finalUrl": "FIXTURE",
+  "categories": {
+   "performance": {
+    "id": "performance",
+    "score": 0.66,
+    "auditRefs": [
+     {
+      "id": "first-contentful-paint",
+      "weight": 10
+     },
+     {
+      "id": "largest-contentful-paint",
+      "weight": 25
+     },
+     {
+      "id": "total-blocking-time",
+      "weight": 30
+     },
+     {
+      "id": "cumulative-layout-shift",
+      "weight": 25
+     },
+     {
+      "id": "speed-index",
+      "weight": 10
+     }
+    ]
+   },
+   "accessibility": {
+    "id": "accessibility",
+    "score": 0.83,
+    "auditRefs": [
+     {
+      "id": "color-contrast",
+      "weight": 7
+     },
+     {
+      "id": "image-alt",
+      "weight": 10
+     },
+     {
+      "id": "html-has-lang",
+      "weight": 7
+     }
+    ]
+   }
+  },
+  "audits": {
+   "first-contentful-paint": {
+    "id": "first-contentful-paint",
+    "title": "First Contentful Paint",
+    "score": 0.62,
+    "scoreDisplayMode": "numeric",
+    "displayValue": "2.9 s"
+   },
+   "largest-contentful-paint": {
+    "id": "largest-contentful-paint",
+    "title": "Largest Contentful Paint",
+    "score": 0.41,
+    "scoreDisplayMode": "numeric",
+    "displayValue": "4.6 s"
+   },
+   "total-blocking-time": {
+    "id": "total-blocking-time",
+    "title": "Total Blocking Time",
+    "score": 0.9,
+    "scoreDisplayMode": "numeric",
+    "displayValue": "180 ms"
+   },
+   "cumulative-layout-shift": {
+    "id": "cumulative-layout-shift",
+    "title": "Cumulative Layout Shift",
+    "score": 1,
+    "scoreDisplayMode": "numeric",
+    "displayValue": "0"
+   },
+   "speed-index": {
+    "id": "speed-index",
+    "title": "Speed Index",
+    "score": 0.7,
+    "scoreDisplayMode": "numeric",
+    "displayValue": "4.1 s"
+   },
+   "color-contrast": {
+    "id": "color-contrast",
+    "title": "Background and foreground colors do not have a sufficient contrast ratio.",
+    "score": 0,
+    "scoreDisplayMode": "binary"
+   },
+   "image-alt": {
+    "id": "image-alt",
+    "title": "Image elements have [alt] attributes",
+    "score": 1,
+    "scoreDisplayMode": "binary"
+   },
+   "html-has-lang": {
+    "id": "html-has-lang",
+    "title": "<html> element does not have a [lang] attribute",
+    "score": 0,
+    "scoreDisplayMode": "binary"
+   }
+  }
+ }
+}

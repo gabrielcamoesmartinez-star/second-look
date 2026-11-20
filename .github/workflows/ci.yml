@@ -1,0 +1,67 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm check:functions-shared
+      - run: pnpm test:unit
+      - run: pnpm test:functions
+      - name: Build web with decoy secrets present, then scan the bundle
+        env:
+          SUPABASE_URL: https://ci.supabase.co
+          SUPABASE_ANON_KEY: ci-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.ZGVjb3lkZWNveWRlY295
+          ANTHROPIC_API_KEY: sk-ant-decoy-decoy-decoy
+          PAGESPEED_API_KEY: AIzaDecoyDecoyDecoyDecoyDecoyDecoyDec
+        run: pnpm --filter @second-look/web build && pnpm check:secrets
+      - name: Dependency audit
+        run: pnpm audit --prod --audit-level high
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: mcr.microsoft.com/playwright:v1.65.1-noble
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+        env: { HOME: /root }
+
+  db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: second_look_test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:db
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/second_look_test
