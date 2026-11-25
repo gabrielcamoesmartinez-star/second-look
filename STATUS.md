@@ -24,6 +24,12 @@ Stage 1's "Done when" requires the deployed site. Nothing is deployed yet, so th
 ### Security bug found and fixed during testing
 Chromium does **not** send redirect hops of an intercepted response back through Playwright's `route()`. A page that redirected to `169.254.169.254` was fetched by the browser directly. Fixed in two ways: (1) the worker follows every redirect itself and checks each hop; (2) Chromium starts with a dead proxy, so anything that slips past interception has no network at all. Covered by the redirect-to-metadata-IP and redirect-loop tests.
 
+### Deployed so far (2026-11-25)
+- **Supabase project** `second-look` (ref `zxogxazkzumsxpwwqlfx`, eu-west-3). Both migrations applied. Checked live: RLS on all 9 tables, users can't insert audits or call queue functions, Realtime on `audits` and `audit_steps`, private `audit-artifacts` bucket. The security advisor's remaining notes are all intentional (service-only tables with no policies; `get_shared_report` is the public share path).
+- **Magic-link email:** custom SMTP through Resend from `login@mail.gabrielmartinezdev.com`. Test invite delivered (landed in spam; the new domain is still warming up).
+- **`create-audit` Edge Function** deployed (v1, JWT verification on). Secrets `IP_HASH_SALT` and `PUBLIC_SITE_URL` are set. `PUBLIC_SITE_URL` is temporarily `http://localhost:5173` and changes when the web app is deployed. Live check: a call with the anon key returns 401 `unauthorized`, as it should.
+- **PageSpeed API key** created (restricted to PageSpeed Insights API). Not yet set anywhere; it goes into the worker's env.
+
 ### What doesn't work yet, and why
 - **Not deployed** (Supabase, Vercel, Fly): accounts and keys are needed from Gabriel (see below).
 - **PageSpeed has not been called for real.** No API key yet. The integration tests use `apps/worker/test/fixtures/psi-synthetic.json`, a hand-built response in the real API shape. It is not a recorded response. Once a key exists, replace it with a real recorded one.
