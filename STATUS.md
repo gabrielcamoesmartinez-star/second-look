@@ -27,6 +27,7 @@ Chromium does **not** send redirect hops of an intercepted response back through
 ### Deployed so far (2026-11-25)
 - **Supabase project** `second-look` (ref `zxogxazkzumsxpwwqlfx`, eu-west-3). Both migrations applied. Checked live: RLS on all 9 tables, users can't insert audits or call queue functions, Realtime on `audits` and `audit_steps`, private `audit-artifacts` bucket. The security advisor's remaining notes are all intentional (service-only tables with no policies; `get_shared_report` is the public share path).
 - **Magic-link email:** custom SMTP through Resend from `login@mail.gabrielmartinezdev.com`. Test invite delivered (landed in spam; the new domain is still warming up).
+- **Worker host:** Railway (EU West, Dockerfile builder; settings configured in the Railway dashboard because Railway no longer accepts config-as-code for new services).
 - **`create-audit` Edge Function** deployed (v1, JWT verification on). Secrets `IP_HASH_SALT` and `PUBLIC_SITE_URL` are set. `PUBLIC_SITE_URL` is temporarily `http://localhost:5173` and changes when the web app is deployed. Live check: a call with the anon key returns 401 `unauthorized`, as it should.
 - **PageSpeed API key** created (restricted to PageSpeed Insights API). Not yet set anywhere; it goes into the worker's env.
 

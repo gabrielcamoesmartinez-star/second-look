@@ -2,8 +2,9 @@
 # The official Playwright image ships the exact Chromium build Playwright 1.65.1 expects.
 FROM mcr.microsoft.com/playwright:v1.65.1-noble
 
-ENV NODE_ENV=production PNPM_HOME=/pnpm PATH=/pnpm:$PATH
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+ENV NODE_ENV=production
+# Newer Node images no longer bundle corepack, so install pnpm with npm.
+RUN npm install -g pnpm@9.15.9 && pnpm --version
 WORKDIR /app
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
