@@ -1,0 +1,7 @@
+# SecondLookBot is asked to stay out of /robots-test, so the
+# "blocked by robots.txt" path can be demonstrated on the live site.
+User-agent: SecondLookBot
+Disallow: /robots-test
+
+User-agent: *
+Allow: /
