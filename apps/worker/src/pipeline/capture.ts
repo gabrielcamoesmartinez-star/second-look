@@ -161,7 +161,7 @@ export async function capturePage(
     });
     const html = await page.content();
     const visibleText = await page.evaluate(() => document.body?.innerText ?? '');
-    const rawCandidates = await page.evaluate(collectCandidatesInPage);
+    const rawCandidates: unknown = await page.evaluate(IN_PAGE_COLLECTOR);
     const candidates = z.array(Candidate).parse(rawCandidates);
     const finalUrl = page.url();
     deps.signal?.removeEventListener('abort', onAbort);
@@ -185,6 +185,17 @@ async function captureDesktop(browser: Browser, url: string, deps: CaptureDeps):
     await context.close().catch(() => undefined);
   }
 }
+
+/**
+ * The collector is sent to the page as source text. Transpilers like tsx/esbuild
+ * (keepNames) inject calls to a `__name` helper that only exists in Node, so the
+ * page would throw "__name is not defined". Defining a no-op `__name` in the same
+ * scope makes the serialized function work however it was compiled.
+ */
+export const IN_PAGE_COLLECTOR = `(() => {
+  const __name = (fn) => fn;
+  return (${collectCandidatesInPage.toString()})();
+})()`;
 
 /**
  * Runs inside the page. Must be self-contained (no closures).
