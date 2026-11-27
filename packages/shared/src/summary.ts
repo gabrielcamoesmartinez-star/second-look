@@ -31,7 +31,7 @@ export function summaryFacts(input: SummaryInput): Record<string, unknown> {
 }
 
 export const SUMMARY_SYSTEM_PROMPT = `You write a short summary of a website audit for the owner of a small local business. They are not technical.
-Write exactly 3 short paragraphs separated by a blank line:
+Write exactly 3 short paragraphs. Separate them with a blank line (two newline characters):
 1. How the site does overall at turning visitors into enquiries, in plain words.
 2. The most important problems found.
 3. What to do first, using the top fixes.
@@ -49,7 +49,9 @@ function numbersIn(s: string): string[] {
 
 export function validateSummary(text: string, input: SummaryInput): { ok: true; value: string } | { ok: false; error: string } {
   const clean = text.trim().replace(/\r\n/g, '\n');
-  const paragraphs = clean.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  let paragraphs = clean.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  // Models often separate paragraphs with a single newline; accept that layout too.
+  if (paragraphs.length !== 3) paragraphs = clean.split(/\n+/).map((p) => p.trim()).filter(Boolean);
   if (paragraphs.length !== 3) return { ok: false, error: `Write exactly 3 paragraphs separated by blank lines (got ${paragraphs.length}).` };
   if (paragraphs.some((p) => p.length > SUMMARY_MAX_PARAGRAPH_CHARS)) return { ok: false, error: `Keep each paragraph under ${SUMMARY_MAX_PARAGRAPH_CHARS} characters.` };
   if (clean.split(/\s+/).length > SUMMARY_MAX_WORDS) return { ok: false, error: `Keep it under ${SUMMARY_MAX_WORDS} words.` };

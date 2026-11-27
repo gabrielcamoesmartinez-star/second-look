@@ -77,8 +77,16 @@ describe('rule checks', () => {
     expect(f.results.local_business_schema?.result).toBe('fail');
   });
 
-  it('no form at all fails with a clear reason', () => {
-    expect(runRuleChecks({ ...goodPage, candidates: [] }).results.short_contact_form?.evidence).toBe('No contact form found on the page.');
+  it('no form at all is not applicable (unsure, no fix), not a fail', () => {
+    expect(runRuleChecks({ ...goodPage, candidates: [] }).results.short_contact_form).toMatchObject({
+      result: 'unsure',
+      confidence: 0,
+      evidence: 'No contact form on the page, so this check does not apply.',
+    });
+  });
+
+  it('a passing tap-to-call link still gets its browser box (shown only in the all-markers view)', () => {
+    expect(runRuleChecks(goodPage).results.tap_to_call_first_screen?.box).toEqual({ x: 4.1, y: 1.9, w: 51.3, h: 5.2 });
   });
 
   it.each(['Seg–Sex 9h às 18h', 'Mon-Fri 9am-5pm', 'Sábado: 10:00 - 13:00'])('detects hours in "%s"', (t) => {
@@ -89,6 +97,10 @@ describe('rule checks', () => {
 describe('marker boxes come from the browser', () => {
   it('converts CSS px to percent of the first screen', () => {
     expect(boxFor(cand({ id: 'x', kind: 'booking', rect: { x: 39, y: 84.4, width: 195, height: 42.2 } }))).toEqual({ x: 10, y: 10, w: 50, h: 5 });
+  });
+  it('off-canvas menu items are not on the first screen', () => {
+    expect(boxFor(cand({ id: 'x', kind: 'booking', rect: { x: 390, y: 20, width: 300, height: 40 } }))).toBeNull();
+    expect(boxFor(cand({ id: 'x', kind: 'booking', rect: { x: -300, y: 20, width: 300, height: 40 } }))).toBeNull();
   });
   it('clamps elements that cross the fold and drops ones below it or hidden', () => {
     expect(boxFor(cand({ id: 'x', kind: 'form', rect: { x: 0, y: 800, width: 390, height: 300 } }))?.h).toBeCloseTo(5.2, 1);

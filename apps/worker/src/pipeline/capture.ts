@@ -153,6 +153,9 @@ export async function capturePage(
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     // Let entrance animations (typed headings, fades) settle before we capture.
     await page.waitForTimeout(SETTLE_MS);
+    // Cookie banners hide the first screen. Hide them on our side only: nothing is clicked or accepted.
+    const hiddenBanners = Number(await page.evaluate(inPage(hideCookieBannersInPage)));
+    if (hiddenBanners > 0) await page.waitForTimeout(200);
 
     const firstScreenPng = await page.screenshot({ type: 'png' });
     const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -195,10 +198,41 @@ async function captureDesktop(browser: Browser, url: string, deps: CaptureDeps):
  * page would throw "__name is not defined". Defining a no-op `__name` in the same
  * scope makes the serialized function work however it was compiled.
  */
-export const IN_PAGE_COLLECTOR = `(() => {
+export function inPage(fn: () => unknown): string {
+  return `(() => {
   const __name = (fn) => fn;
-  return (${collectCandidatesInPage.toString()})();
+  return (${fn.toString()})();
 })()`;
+}
+export const IN_PAGE_COLLECTOR = inPage(collectCandidatesInPage);
+
+/**
+ * Runs inside the page. Hides consent/cookie banners (known CMP containers, plus any
+ * fixed or sticky element that talks about cookies and has buttons). Returns how many were hidden.
+ */
+export function hideCookieBannersInPage(): number {
+  const KNOWN = [
+    '#onetrust-consent-sdk', '#onetrust-banner-sdk', '#CybotCookiebotDialog', '#usercentrics-root', '#cookie-law-info-bar',
+    '.cky-consent-container', '#cmplz-cookiebanner-container', '.cc-window', '.cookie-notice-container', '#cookie-notice',
+    '.qc-cmp2-container', '#didomi-host', '#iubenda-cs-banner', '.cmplz-cookiebanner', '#moove_gdpr_cookie_info_bar',
+  ];
+  const COOKIE_WORDS = /cookie|consent|consentimento|rgpd|gdpr|privacidade/i;
+  const hidden = new Set<Element>();
+  for (const sel of KNOWN) document.querySelectorAll(sel).forEach((el) => hidden.add(el));
+  document.querySelectorAll('body *').forEach((el) => {
+    const st = getComputedStyle(el);
+    if (st.position !== 'fixed' && st.position !== 'sticky') return;
+    const text = (el as HTMLElement).innerText || '';
+    if (text.length > 0 && text.length < 3000 && COOKIE_WORDS.test(text) && el.querySelector('button, a[role="button"], [class*="btn"]')) hidden.add(el);
+  });
+  hidden.forEach((el) => (el as HTMLElement).style.setProperty('display', 'none', 'important'));
+  // Some banners lock scrolling or add a dark overlay class to <body>.
+  if (hidden.size > 0) {
+    document.documentElement.style.setProperty('overflow', 'visible', 'important');
+    document.body.style.setProperty('overflow', 'visible', 'important');
+  }
+  return hidden.size;
+}
 
 /**
  * Runs inside the page. Must be self-contained (no closures).
@@ -229,7 +263,19 @@ export function collectCandidatesInPage(): unknown[] {
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return false;
     const s = getComputedStyle(el);
-    return s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) > 0.05;
+    if (s.visibility === 'hidden' || s.display === 'none' || Number(s.opacity) <= 0.05) return false;
+    // Closed menus are often faded out on an ancestor.
+    for (let a = el.parentElement, i = 0; a && i < 12; a = a.parentElement, i++) {
+      if (Number(getComputedStyle(a).opacity) <= 0.05) return false;
+    }
+    // If its centre is on screen, something else must not be covering it (e.g. an overlay).
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    if (cx >= 0 && cx < window.innerWidth && cy >= 0 && cy < window.innerHeight) {
+      const hit = document.elementFromPoint(cx, cy);
+      if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) return false;
+    }
+    return true;
   };
   const push = (el: Element, kind: string, extra: Record<string, unknown> = {}) => {
     if (out.length >= MAX) return;

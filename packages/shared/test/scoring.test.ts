@@ -100,6 +100,10 @@ describe('validateSummary', () => {
   it('accepts 3 short paragraphs using only given numbers', () => {
     expect(validateSummary(ok, input).ok).toBe(true);
   });
+  it('accepts paragraphs separated by single newlines (a real model habit) and normalises them', () => {
+    const single = ok.replace(/\n\n/g, '\n');
+    expect(validateSummary(single, input)).toEqual({ ok: true, value: ok });
+  });
   it('rejects the wrong number of paragraphs', () => {
     expect(validateSummary('One paragraph only.', input)).toMatchObject({ ok: false, error: expect.stringMatching(/exactly 3/) });
   });

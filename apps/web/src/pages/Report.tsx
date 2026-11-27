@@ -10,9 +10,9 @@ import {
   type ScoreCategory,
 } from '@second-look/shared';
 import { useEffect, useState } from 'react';
-import { Navigate, useParams, useSearchParams } from 'react-router';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router';
 import { StatusBadge } from '../components/StatusBadge.tsx';
-import { getChecksAndFixes, signedArtifactUrl, TERMINAL } from '../lib/api.ts';
+import { createAudit, getChecksAndFixes, signedArtifactUrl, TERMINAL } from '../lib/api.ts';
 import { useLiveAudit } from '../lib/useAudit.ts';
 
 /** Stage 2 report with plain styling. The designed version (Gauge, AnnotatedScreenshot, sticky bar) is Stage 4. */
@@ -23,6 +23,14 @@ export function Report() {
   const [shot, setShot] = useState<string | null>(null);
   const [checks, setChecks] = useState<CheckResultRow[]>([]);
   const [fixes, setFixes] = useState<FixRow[]>([]);
+  const navigate = useNavigate();
+  const [rerun, setRerun] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  async function onRerun(url: string) {
+    setRerun({ busy: true, error: null });
+    const res = await createAudit(url, true);
+    if (res.ok) navigate(`/audits/${res.auditId}/running`);
+    else setRerun({ busy: false, error: res.message });
+  }
 
   useEffect(() => {
     if (audit?.screenshot_path) void signedArtifactUrl(audit.screenshot_path).then(setShot);
@@ -45,7 +53,9 @@ export function Report() {
   const breakdown = cats.breakdown;
   const copy = audit.error_code ? errorCopy(audit.error_code) : null;
   const stepErrors = steps.filter((s) => s.status === 'failed' && s.error_code && s.step !== 'fetch');
-  const failedWithBox = checks.filter((c) => c.result === 'fail' && c.box).sort(byCheckOrder);
+  // Normally only failed checks get numbered markers. ?markers=all also draws passing elements (for checking alignment).
+  const showAll = params.get('markers') === 'all';
+  const failedWithBox = checks.filter((c) => (showAll || c.result === 'fail') && c.box).sort(byCheckOrder);
   const sortedChecks = [...checks].sort(byCheckOrder);
 
   return (
@@ -58,8 +68,21 @@ export function Report() {
             {audit.duration_ms !== null && ` · ${(audit.duration_ms / 1000).toFixed(1)}s`}
           </p>
         </div>
-        <StatusBadge status={audit.status} />
+        <div className="flex items-center gap-3">
+          <StatusBadge status={audit.status} />
+          <button
+            type="button"
+            onClick={() => void onRerun(audit.input_url)}
+            disabled={rerun.busy}
+            aria-busy={rerun.busy}
+            className="rounded border border-line px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            {rerun.busy ? 'Starting…' : 'Re-run'}
+          </button>
+        </div>
       </header>
+      {rerun.error && <p role="alert" className="mt-3 text-fail">{rerun.error}</p>}
+      <p className="sr-only">Re-run starts a fresh audit and uses one of today's audits.</p>
 
       {params.get('cached') && (
         <p role="status" className="mt-4 rounded border border-line p-3 text-sm text-muted">
@@ -139,7 +162,7 @@ export function Report() {
                   {failedWithBox.map((c, i) => (
                     <div
                       key={c.check_id}
-                      className="absolute border-2 border-dashed border-fail"
+                      className={`absolute border-2 border-dashed ${c.result === 'fail' ? 'border-fail' : 'border-pass'}`}
                       style={{ left: `${c.box!.x}%`, top: `${c.box!.y}%`, width: `${c.box!.w}%`, height: `${c.box!.h}%` }}
                     >
                       <span className="absolute -left-3 -top-3 flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white font-mono text-xs text-black shadow-[0_0_12px_rgba(255,155,128,.6)]">
@@ -156,6 +179,7 @@ export function Report() {
                   {failedWithBox.map((c, i) => (
                     <li key={c.check_id}>
                       <span className="font-mono">{i + 1}</span> · {nameOf(c.check_id)}
+                      {showAll && <span className="ml-2"><StatusBadge status={c.result} /></span>}
                     </li>
                   ))}
                 </ol>

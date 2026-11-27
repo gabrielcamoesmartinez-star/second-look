@@ -16,7 +16,15 @@ const FOLD = MOBILE_VIEWPORT.height;
 /* ---------- Geometry ---------- */
 
 export function inFirstScreen(c: Candidate): boolean {
-  return c.visible && c.rect.y < FOLD && c.rect.y + c.rect.height > 0 && c.rect.width > 0;
+  return (
+    c.visible &&
+    c.rect.width > 0 &&
+    c.rect.y < FOLD &&
+    c.rect.y + c.rect.height > 0 &&
+    // Off-canvas menus sit beside the viewport; they aren't on the first screen.
+    c.rect.x < MOBILE_VIEWPORT.width &&
+    c.rect.x + c.rect.width > 0
+  );
 }
 
 /** Marker box in percent of the first-screen screenshot, or null if the element isn't on it. */
@@ -66,8 +74,7 @@ export function runRuleChecks(page: PageFacts): RuleFindings {
         ? `A tap-to-call link exists ("${telBelow.text}") but only at ${Math.round(telBelow.rect.y)}px, below the first screen (${FOLD}px).`
         : 'No tap-to-call (tel:) link on the page.',
     evidence_selector: (telTop ?? telBelow)?.selector ?? null,
-    // A failing check only gets a marker if the cited element is on screen; a below-fold tel link isn't.
-    box: null,
+    box: boxFor(telTop),
   };
 
   // short_contact_form — rule only
@@ -80,13 +87,14 @@ export function runRuleChecks(page: PageFacts): RuleFindings {
         confidence: 1,
         evidence: `Form with ${longest.fieldCount} visible field${longest.fieldCount === 1 ? '' : 's'} (aim for ${MAX_FORM_FIELDS} or fewer).`,
         evidence_selector: longest.selector,
-        box: (longest.fieldCount ?? 0) > MAX_FORM_FIELDS ? boxFor(longest) : null,
+        box: boxFor(longest),
       }
     : {
+        // Nothing to shorten: not applicable, so it's left out of the score and produces no fix.
         ...base('short_contact_form'),
-        result: 'fail',
-        confidence: 0.9,
-        evidence: 'No contact form found on the page.',
+        result: 'unsure',
+        confidence: 0,
+        evidence: 'No contact form on the page, so this check does not apply.',
         evidence_selector: null,
         box: null,
       };
@@ -231,7 +239,8 @@ export function mergeChecklist(page: PageFacts, findings: RuleFindings, ai: AiOu
         confidence: round2(a.confidence),
         evidence: a.evidence,
         evidence_selector: el?.selector ?? null,
-        box: a.result === 'fail' ? boxFor(el) : null,
+        // Boxes are stored for any cited on-screen element; the report numbers only failed ones.
+        box: boxFor(el),
         source: def.source,
       };
     } else {
@@ -249,7 +258,7 @@ export function mergeChecklist(page: PageFacts, findings: RuleFindings, ai: AiOu
     // Rule evidence that settles a rule+ai check outright.
     if (def.id === 'reviews_visible' && findings.hints.reviewWidget) {
       const w = findings.hints.reviewWidget;
-      result = { ...result, result: 'pass', confidence: Math.max(result.confidence, 0.9), evidence: `Review widget on the page: "${w.text.slice(0, 80) || w.selector}".`, evidence_selector: w.selector, box: null };
+      result = { ...result, result: 'pass', confidence: Math.max(result.confidence, 0.9), evidence: `Review widget on the page: "${w.text.slice(0, 80) || w.selector}".`, evidence_selector: w.selector, box: boxFor(w) };
     }
     if (def.id === 'hours_visible' && findings.hints.hoursTextMatch) {
       result = { ...result, result: 'pass', confidence: Math.max(result.confidence, 0.9), evidence: `Hours in the page text: "${findings.hints.hoursTextMatch.trim().slice(0, 100)}".`, evidence_selector: null, box: null };

@@ -36,8 +36,8 @@ const html = (body: string): Handler => (req, res) => {
 };
 
 let browser: Browser;
-const hosts: Record<'good' | 'bad' | 'robots' | 'slow' | 'redirect' | 'loop', string> = {
-  good: '', bad: '', robots: '', slow: '', redirect: '', loop: '',
+const hosts: Record<'good' | 'bad' | 'robots' | 'slow' | 'redirect' | 'loop' | 'overlay', string> = {
+  good: '', bad: '', robots: '', slow: '', redirect: '', loop: '', overlay: '',
 };
 const blockedRequests: string[] = [];
 let safeFetch: SafeFetch;
@@ -45,6 +45,12 @@ let safeFetch: SafeFetch;
 beforeAll(async () => {
   hosts.good = await serve(html(goodHtml));
   hosts.bad = await serve(html(badHtml));
+  hosts.overlay = await serve(
+    html(`<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Overlay test page</title></head><body style="margin:0">
+      <a href="tel:+351210000000" style="display:block;padding:20px">Call us</a>
+      <div style="position:fixed;inset:0;background:rgba(0,0,0,.8);color:#fff;padding:40px">Subscribe to our newsletter! <button>Sign up</button></div>
+    </body></html>`),
+  );
   hosts.robots = await serve((req, res) => {
     if (req.url === '/robots.txt') return void res.writeHead(200, { 'content-type': 'text/plain' }).end('User-agent: *\nDisallow: /\n');
     html(goodHtml)(req, res);
@@ -271,6 +277,27 @@ describe('safeFetch direct', () => {
     const f = createSafeFetch({ resolve: async () => ['10.1.2.3'] });
     await expect(f('http://rebind.example/', { userAgent: 't', timeoutMs: 1000, maxBytes: 100 })).rejects.toMatchObject({ code: 'ssrf_blocked' });
   });
+});
+
+describe('what counts as on the first screen', () => {
+  type C = { kind: string; text: string; rect: { x: number; y: number }; visible: boolean };
+  it('cookie banners are hidden before capture; closed off-canvas menu links are not first-screen', async () => {
+    const { blobs, store } = await audit(`http://${hosts.good}/`);
+    const candidates = JSON.parse(blobs.files.get('u1/a1/candidates.json')!.toString()) as C[];
+    const drawer = candidates.find((c) => c.text.includes('closed menu'));
+    expect(drawer).toBeDefined();
+    expect(drawer!.rect.x).toBeGreaterThanOrEqual(390); // beside the viewport → excluded by inFirstScreen
+    // The cookie bar covered the bottom of the screen; after hiding it, the quote link is visible again.
+    expect(candidates.find((c) => c.text === 'Get a free quote')?.visible).toBe(true);
+    expect(blobs.files.get('u1/a1/page.html')!.toString()).toMatch(/id="cookiebar"[^>]*display: none !important/);
+    expect(store.checks.find((c) => c.check_id === 'tap_to_call_first_screen')?.box).not.toBeNull();
+  }, 30_000);
+
+  it('an element covered by a non-cookie overlay is not visible, so tap-to-call fails', async () => {
+    const { store } = await audit(`http://${hosts.overlay}/`);
+    const tel = store.checks.find((c) => c.check_id === 'tap_to_call_first_screen');
+    expect(tel?.result).toBe('fail');
+  }, 30_000);
 });
 
 describe('checklist, scoring and summary', () => {

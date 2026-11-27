@@ -2,7 +2,7 @@ import { AuditRow, AuditStepRow, CheckResultRow, CreateAuditResponse, errorCopy,
 import { z } from 'zod';
 import { supabase, SUPABASE_URL } from './supabase.ts';
 
-export async function createAudit(url: string): Promise<CreateAuditResponse> {
+export async function createAudit(url: string, force = false): Promise<CreateAuditResponse> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) return { ok: false, code: 'unauthorized', message: errorCopy('unauthorized').message };
@@ -11,7 +11,7 @@ export async function createAudit(url: string): Promise<CreateAuditResponse> {
     res = await fetch(`${SUPABASE_URL}/functions/v1/create-audit`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, force }),
     });
   } catch {
     return { ok: false, code: 'internal', message: 'Could not reach the server. Check your connection.' };
