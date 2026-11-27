@@ -3,7 +3,7 @@
  * Production wires them to Supabase and Google; integration tests wire them
  * to in-memory fakes and recorded responses.
  */
-import type { CategoryScores, ErrorCode, StepName, StepStatus } from '@second-look/shared';
+import type { CategoryScores, CheckResult, ErrorCode, RankedFix, StepName, StepStatus } from '@second-look/shared';
 
 export interface StepUpdate {
   status: StepStatus;
@@ -22,6 +22,11 @@ export interface AuditPatch {
   html_path?: string | null;
   duration_ms?: number;
   completed_at?: string;
+  score?: number | null;
+  summary?: string | null;
+  ai_input_tokens?: number;
+  ai_output_tokens?: number;
+  ai_cost_usd?: number;
 }
 
 export interface AuditRecord {
@@ -35,6 +40,13 @@ export interface Store {
   getAudit(id: string): Promise<AuditRecord | null>;
   updateAudit(id: string, patch: AuditPatch): Promise<void>;
   updateStep(id: string, step: StepName, update: StepUpdate): Promise<void>;
+  /** Replace all check results for the audit (idempotent). */
+  saveCheckResults(id: string, results: CheckResult[]): Promise<void>;
+  /** Replace all fixes for the audit (idempotent). */
+  saveFixes(id: string, fixes: RankedFix[]): Promise<void>;
+  /** Today's (UTC) total AI spend in USD. */
+  getAiSpendToday(): Promise<number>;
+  addAiSpend(usd: number): Promise<void>;
 }
 
 export interface BlobStore {

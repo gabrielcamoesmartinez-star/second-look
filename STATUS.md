@@ -1,6 +1,6 @@
 # STATUS
 
-Last updated: 2026-11-27
+Last updated: 2026-11-27 (Stage 2 in progress)
 
 ## Stage 1 — working path from start to finish · DONE (2026-11-27)
 
@@ -69,7 +69,28 @@ Stage 2: the 8-check enquiry checklist (rules + AI), Zod-validated model output 
 2. **`DAILY_AI_BUDGET_USD`**: the daily cap for AI spend (e.g. $1–2).
 3. Later, for evals: hand labels for the 15–20 snapshot sites (the label files will be left for you to fill in).
 
-## Stage 2 — checklist, AI and scoring · NOT STARTED
+## Stage 2 — checklist, AI and scoring · IN PROGRESS (code complete and tested; deploying)
+
+### What works (tested locally against real Chromium; AI replies are hand-written fakes)
+- **Check library** (`packages/shared/src/checks.ts`): the 8 version-1 checks, each with its source (rule / ai / rule+ai) and a one-line reason.
+- **Rule checks** decide tap-to-call (browser box inside 0–844px), contact form length, and LocalBusiness JSON-LD. They also supply evidence for reviews (visible review widgets), hours (hours in the text) and booking (first-screen candidates).
+- **AI checklist:** one Claude call with the first-screen screenshot, trimmed text, DOM outline and candidate ids. The output is Zod-validated, `evidence_element_id` must be a real candidate id, and coordinates are never read from the model. Invalid output → one retry with the validation error → otherwise the AI checks are `unsure` with confidence 0. Confidence below 0.7 → `unsure`.
+- **Marker boxes** always come from the browser's bounding box of the cited element, as a percent of the first screen. Elements below the fold get no marker.
+- **Score:** enquiry 40 / local visibility 25 (the 4 local checks plus SEO basics as one more item) / performance 20 / accessibility 15. Missing categories are re-weighted and named in the report. Unsure answers are left out, not counted as fails.
+- **Fixes** come from a fixed library (8 checks, 6 SEO rules, slow speed <50, accessibility <80), ranked by impact ÷ effort. The AI never writes fixes.
+- **Summary:** a second, small Claude call from the structured results only. Validated: exactly 3 paragraphs, length limits, no bullets, and **every number must appear in the input** (catches invented stats). One retry, then no summary (`summary_invalid`).
+- **Budget guard:** if today's `ai_spend` ≥ `DAILY_AI_BUDGET_USD`, there are no AI calls; rule checks still run and the audit is `partial` with the spec's copy. Tokens and cost are recorded on every audit and added to `ai_spend`.
+- **24h cache:** the same user + same URL within 24h returns the earlier result (`cached: true`, no quota used). `force: true` re-runs and counts against the quota. (The Re-run button is Stage 3.)
+- **Report (plain styling):** overall score, 4 category scores with effective weights, "In plain English", "What the AI saw" (phone frame with numbered markers and a list), ranked fixes, and the checklist table (result, confidence, evidence, source).
+- **Evals:** `pnpm eval:snapshot` (captures sites with the real, SSRF-safe capture code), `pnpm eval:labels` (creates **empty** label files), `pnpm eval` (real model → `evals/results.md`: accuracy per check, unsure rate, cost). A manual GitHub Action ("AI eval") runs it.
+- Tests: 109 shared · 22 worker integration · 16 DB · 11 function · 3 web · 1 evals.
+
+### Not done yet
+- Deployed and verified on real sites (needs this push).
+- "Markers line up with real elements on at least 3 real sites": to check after deploy.
+- Evals: `evals/sites.json` is empty. It needs 15–20 real local business sites, snapshots, and Gabriel's hand labels.
+- The AI fakes in tests are hand-written, not recordings. Replace them with recorded real replies once the live worker has made calls.
+
 ## Stage 3 — product features · NOT STARTED
 ## Stage 4 — full design · NOT STARTED
 ## Stage 5 — landing page and launch · NOT STARTED

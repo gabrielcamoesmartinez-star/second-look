@@ -10,12 +10,15 @@
     "build": "pnpm -r build",
     "typecheck": "tsc -p tsconfig.json && pnpm -r typecheck",
     "test": "pnpm -r test",
-    "test:unit": "pnpm --filter @second-look/shared test && pnpm --filter @second-look/web test",
+    "test:unit": "pnpm --filter @second-look/shared test && pnpm --filter @second-look/web test && pnpm --filter @second-look/evals test",
     "test:integration": "pnpm --filter @second-look/worker test",
     "test:db": "vitest run --root tests/db",
     "check:secrets": "node scripts/check-bundle-secrets.mjs",
     "test:functions": "vitest run tests/functions",
-    "check:functions-shared": "node scripts/sync-functions-shared.mjs --check"
+    "check:functions-shared": "node scripts/sync-functions-shared.mjs --check",
+    "eval": "pnpm --filter @second-look/evals eval",
+    "eval:snapshot": "pnpm --filter @second-look/evals snapshot",
+    "eval:labels": "pnpm --filter @second-look/evals labels"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",

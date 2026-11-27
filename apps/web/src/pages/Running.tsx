@@ -1,4 +1,4 @@
-import { errorCopy, MAX_STEP_ATTEMPTS, STAGE1_STEPS, type AuditStepRow } from '@second-look/shared';
+import { errorCopy, MAX_STEP_ATTEMPTS, PIPELINE_STEPS, type AuditStepRow } from '@second-look/shared';
 import { useEffect, useState } from 'react';
 import { Navigate, useParams } from 'react-router';
 import { StatusBadge } from '../components/StatusBadge.tsx';
@@ -10,6 +10,8 @@ const LABELS: Record<string, string> = {
   performance: 'Measure speed (Google PageSpeed)',
   accessibility: 'Check accessibility (Google PageSpeed)',
   seo: 'Check search basics',
+  checklist_ai: 'Check the enquiry checklist (rules + AI)',
+  summary: 'Write the plain-English summary',
 };
 
 export function Running() {
@@ -25,7 +27,7 @@ export function Running() {
   if (!loading && !audit) return <main className="p-8"><p>We couldn't find that audit.</p></main>;
 
   const byStep = new Map(steps.map((s) => [s.step, s]));
-  const current = STAGE1_STEPS.map((s) => byStep.get(s)).find((s) => s?.status === 'running' || s?.status === 'retrying');
+  const current = PIPELINE_STEPS.map((s) => byStep.get(s)).find((s) => s?.status === 'running' || s?.status === 'retrying');
 
   return (
     <main className="mx-auto max-w-4xl p-6" aria-busy={!audit || !TERMINAL.has(audit.status)}>
@@ -39,7 +41,7 @@ export function Running() {
 
       <div className="mt-6 grid gap-6 md:grid-cols-[1fr_220px]">
         <ol className="space-y-2">
-          {STAGE1_STEPS.map((name) => (
+          {PIPELINE_STEPS.map((name) => (
             <StepItem key={name} name={name} step={byStep.get(name)} />
           ))}
         </ol>

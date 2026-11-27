@@ -1,4 +1,4 @@
-import { AuditRow, AuditStepRow, CreateAuditResponse, errorCopy } from '@second-look/shared';
+import { AuditRow, AuditStepRow, CheckResultRow, CreateAuditResponse, errorCopy, FixRow } from '@second-look/shared';
 import { z } from 'zod';
 import { supabase, SUPABASE_URL } from './supabase.ts';
 
@@ -37,6 +37,16 @@ export async function getAudit(id: string): Promise<{ audit: AuditRow | null; st
   if (a.error) throw new Error(a.error.message);
   if (s.error) throw new Error(s.error.message);
   return { audit: a.data ? AuditRow.parse(a.data) : null, steps: z.array(AuditStepRow).parse(s.data ?? []) };
+}
+
+export async function getChecksAndFixes(id: string): Promise<{ checks: CheckResultRow[]; fixes: FixRow[] }> {
+  const [c, f] = await Promise.all([
+    supabase.from('check_results').select('*').eq('audit_id', id),
+    supabase.from('fixes').select('*').eq('audit_id', id).order('rank'),
+  ]);
+  if (c.error) throw new Error(c.error.message);
+  if (f.error) throw new Error(f.error.message);
+  return { checks: z.array(CheckResultRow).parse(c.data ?? []), fixes: z.array(FixRow).parse(f.data ?? []) };
 }
 
 export async function quotaRemaining(limit: number): Promise<number> {

@@ -8,6 +8,7 @@ import { createRunner } from './jobRunner.ts';
 import { BROWSER_ARGS } from './pipeline/capture.ts';
 import { createSafeFetch, defaultResolver } from './net/safeFetch.ts';
 import { createPageSpeedClient } from './pipeline/pagespeed.ts';
+import { createAnthropicClient } from './ai/anthropic.ts';
 import { runAudit } from './pipeline/run.ts';
 import { serviceClient, supabaseBlobs, supabaseQueue, supabaseStore } from './supabase.ts';
 
@@ -22,6 +23,10 @@ const queue = supabaseQueue(db, workerId);
 const pagespeed = createPageSpeedClient(env.PAGESPEED_API_KEY);
 const safeFetch = createSafeFetch({ resolve: defaultResolver });
 const userAgent = botUserAgent(env.PUBLIC_SITE_URL);
+const ai =
+  env.ANTHROPIC_API_KEY && env.CLAUDE_MODEL ? createAnthropicClient({ apiKey: env.ANTHROPIC_API_KEY, model: env.CLAUDE_MODEL }) : null;
+const pricing = { inputPerMTok: env.AI_INPUT_USD_PER_MTOK, outputPerMTok: env.AI_OUTPUT_USD_PER_MTOK };
+if (!ai) log.warn('ANTHROPIC_API_KEY not set: AI checks will be marked unsure');
 
 const browser = await chromium.launch({
   executablePath: env.CHROMIUM_PATH,
@@ -34,7 +39,8 @@ const runner = createRunner({
   queue,
   concurrency: Math.min(env.WORKER_CONCURRENCY, MAX_CONCURRENT_JOBS),
   log,
-  run: (auditId, signal, jobLog) => runAudit(auditId, { store, blobs, pagespeed, browser, safeFetch, userAgent, log: jobLog, signal }),
+  run: (auditId, signal, jobLog) =>
+    runAudit(auditId, { store, blobs, pagespeed, browser, safeFetch, userAgent, log: jobLog, signal, ai, pricing, dailyAiBudgetUsd: env.DAILY_AI_BUDGET_USD }),
   onCrash: (auditId) =>
     store.updateAudit(auditId, {
       status: 'failed',

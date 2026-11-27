@@ -35,6 +35,16 @@ Deno.serve((req) =>
       const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${IP_SALT}:${ip}`));
       return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
     },
+    async findRecent({ userId, url }) {
+      const { data, error } = await service.rpc('find_recent_audit', { p_user: userId, p_input_url: url });
+      if (error) throw new Error(error.message);
+      return typeof data === 'string' ? data : null;
+    },
+    async remaining(userId) {
+      const { data, error } = await service.from('profiles').select('audits_today, quota_reset_at').eq('id', userId).maybeSingle();
+      if (error || !data) return USER_LIMIT;
+      return new Date(data.quota_reset_at as string) <= new Date() ? USER_LIMIT : Math.max(USER_LIMIT - (data.audits_today as number), 0);
+    },
     async reserve({ userId, ipHash, url }) {
       const { data, error } = await service.rpc('reserve_audit', {
         p_user: userId,

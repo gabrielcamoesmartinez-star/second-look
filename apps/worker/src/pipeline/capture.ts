@@ -11,6 +11,7 @@ import { FetchError, type SafeFetch } from '../net/safeFetch.ts';
 /** Cap on everything the page loads, to protect the worker. The 10 MB limit applies to the HTML document itself. */
 const TOTAL_PAGE_BUDGET_BYTES = 40 * 1024 * 1024;
 const SUBRESOURCE_TIMEOUT_MS = 15_000;
+const SETTLE_MS = 1_500;
 
 export interface Capture {
   finalUrl: string;
@@ -150,6 +151,8 @@ export async function capturePage(
     if (status >= 400) throw new FetchError('http_error', `The page returned HTTP ${status}`);
 
     await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+    // Let entrance animations (typed headings, fades) settle before we capture.
+    await page.waitForTimeout(SETTLE_MS);
 
     const firstScreenPng = await page.screenshot({ type: 'png' });
     const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);

@@ -186,3 +186,27 @@ describe('job queue', () => {
     expect(row.attempts).toBe(claimed.attempts - 1);
   });
 });
+
+describe('stage 2', () => {
+  it('new audits get all six steps', async () => {
+    const u = (await db.query(`insert into auth.users (email) values ('s2@t.local') returning id`)).rows[0].id;
+    const a = (await db.query(`select audit_id from reserve_audit($1, 'ip-s2', 'https://s2.example/', 3, 10)`, [u])).rows[0].audit_id;
+    const steps = (await db.query('select step::text from audit_steps where audit_id = $1 order by step', [a])).rows.map((r) => r.step);
+    expect(steps.sort()).toEqual(['accessibility', 'checklist_ai', 'fetch', 'performance', 'seo', 'summary']);
+  });
+
+  it('find_recent_audit returns only the same user\'s finished audit of that URL within 24h', async () => {
+    const u = (await db.query(`insert into auth.users (email) values ('cache@t.local') returning id`)).rows[0].id;
+    const other = (await db.query(`insert into auth.users (email) values ('cache2@t.local') returning id`)).rows[0].id;
+    const a = (await db.query(`select audit_id from reserve_audit($1, 'ip-c1', 'https://cache.example/', 9, 99)`, [u])).rows[0].audit_id;
+    const find = async (user: string, url: string) => (await db.query('select find_recent_audit($1, $2) as id', [user, url])).rows[0].id;
+    expect(await find(u, 'https://cache.example/')).toBeNull(); // still queued
+    await db.query(`update audits set status = 'complete' where id = $1`, [a]);
+    expect(await find(u, 'https://cache.example/')).toBe(a);
+    expect(await find(other, 'https://cache.example/')).toBeNull();
+    expect(await find(u, 'https://other.example/')).toBeNull();
+    await db.query(`update audits set created_at = now() - interval '25 hours' where id = $1`, [a]);
+    expect(await find(u, 'https://cache.example/')).toBeNull();
+    await expect(as('authenticated', u, () => db.query('select find_recent_audit($1, $2)', [u, 'https://cache.example/']))).rejects.toThrow(/permission denied/);
+  });
+});

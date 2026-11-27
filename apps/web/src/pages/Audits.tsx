@@ -31,7 +31,7 @@ export function Audits() {
     setServerError(null);
     const res = await createAudit(url);
     setSubmitting(false);
-    if (res.ok) navigate(`/audits/${res.auditId}/running`);
+    if (res.ok) navigate(res.cached ? `/audits/${res.auditId}?cached=1` : `/audits/${res.auditId}/running`);
     else setServerError(res.message);
   }
 

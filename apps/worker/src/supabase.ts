@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import type { CheckResult, RankedFix } from '@second-look/shared';
 import type { AuditPatch, AuditRecord, BlobStore, Store, StepUpdate } from './ports.ts';
 
 export const BUCKET = 'audit-artifacts';
@@ -31,6 +32,30 @@ export function supabaseStore(db: SupabaseClient): Store {
       if (u.status === 'done' || u.status === 'failed' || u.status === 'skipped') row['finished_at'] = now;
       const { error } = await db.from('audit_steps').upsert({ audit_id: id, step, ...row }, { onConflict: 'audit_id,step' });
       if (error) throw new Error(`updateStep: ${error.message}`);
+    },
+    async saveCheckResults(id, results: CheckResult[]) {
+      // Upsert on (audit_id, check_id) keeps row ids stable across retries, so flags stay attached.
+      const { error } = await db
+        .from('check_results')
+        .upsert(results.map((r) => ({ audit_id: id, ...r })), { onConflict: 'audit_id,check_id' });
+      if (error) throw new Error(`saveCheckResults: ${error.message}`);
+    },
+    async saveFixes(id, fixes: RankedFix[]) {
+      const del = await db.from('fixes').delete().eq('audit_id', id);
+      if (del.error) throw new Error(`saveFixes(delete): ${del.error.message}`);
+      if (fixes.length === 0) return;
+      const { error } = await db.from('fixes').insert(fixes.map((f) => ({ audit_id: id, ...f })));
+      if (error) throw new Error(`saveFixes: ${error.message}`);
+    },
+    async getAiSpendToday() {
+      const today = new Date().toISOString().slice(0, 10);
+      const { data, error } = await db.from('ai_spend').select('total_usd').eq('day', today).maybeSingle();
+      if (error) throw new Error(`getAiSpendToday: ${error.message}`);
+      return data ? Number(data.total_usd) : 0;
+    },
+    async addAiSpend(usd) {
+      const { error } = await db.rpc('add_ai_spend', { p_usd: usd });
+      if (error) throw new Error(`addAiSpend: ${error.message}`);
     },
   };
 }

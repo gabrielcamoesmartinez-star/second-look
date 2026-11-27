@@ -14,6 +14,8 @@ function deps(over: Partial<CreateAuditDeps> = {}): CreateAuditDeps & { reserved
       reserved.push(a);
       return { auditId: uuid, remaining: 2 };
     },
+    findRecent: async ({ url }) => (url === 'https://cached.example/' ? '22222222-2222-4222-8222-222222222222' : null),
+    remaining: async () => 1,
     ...over,
   };
 }
@@ -64,5 +66,21 @@ describe('create-audit', () => {
   it('answers CORS preflight and refuses GET', async () => {
     expect((await handleCreateAudit(new Request('https://fn.test', { method: 'OPTIONS' }), deps())).status).toBe(204);
     expect((await handleCreateAudit(new Request('https://fn.test', { method: 'GET' }), deps())).status).toBe(405);
+  });
+});
+
+describe('create-audit cache', () => {
+  it('returns a recent result without using quota', async () => {
+    const d = deps();
+    const res = await handleCreateAudit(post({ url: 'cached.example' }), d);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, auditId: '22222222-2222-4222-8222-222222222222', cached: true, remaining: 1 });
+    expect(d.reserved).toEqual([]);
+  });
+  it('force re-runs and counts against quota', async () => {
+    const d = deps();
+    const res = await handleCreateAudit(post({ url: 'cached.example', force: true }), d);
+    expect(res.status).toBe(201);
+    expect(d.reserved).toHaveLength(1);
   });
 });

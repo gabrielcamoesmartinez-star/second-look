@@ -1,11 +1,14 @@
 /**
- * The Stage 1 audit pipeline: fetch → performance + accessibility → seo.
+ * The audit pipeline: fetch → performance + accessibility → seo → checklist_ai → summary.
  * Each step writes its status to audit_steps (which drives the Running
  * screen over Realtime). Steps are idempotent: a re-run overwrites outputs.
  */
 import type { Browser } from 'playwright';
-import { type CategoryScores, ERROR_COPY, normaliseUrl } from '@second-look/shared';
+import { buildFixes, type CategoryScores, computeScore, ERROR_COPY, normaliseUrl, type ErrorCode } from '@second-look/shared';
+import { mergeChecklist, runRuleChecks, type AiOutcome } from '@second-look/shared/checklist.ts';
 import { runSeoRules } from '@second-look/shared/seo.ts';
+import { costUsd, type AiClient, type Pricing } from '../ai/anthropic.ts';
+import { emptyUsage, runAiChecklist, runAiSummary } from '../ai/steps.ts';
 import { FetchError, type SafeFetch } from '../net/safeFetch.ts';
 import { checkRobots } from '../net/robots.ts';
 import type { BlobStore, Logger, PageSpeedClient, Store } from '../ports.ts';
@@ -20,6 +23,10 @@ export interface PipelineDeps {
   safeFetch: SafeFetch;
   userAgent: string;
   log: Logger;
+  /** null when ANTHROPIC_API_KEY isn't configured: AI checks are marked unsure. */
+  ai: AiClient | null;
+  pricing: Pricing;
+  dailyAiBudgetUsd: number;
   signal?: AbortSignal;
   /** Test hook: shorten PageSpeed retry backoff. */
   pagespeedBackoffMs?: number;
@@ -140,11 +147,100 @@ export async function runAudit(auditId: string, deps: PipelineDeps): Promise<Pip
     detail: `${seo.checks.filter((c) => c.result === 'pass').length} of ${seo.checks.length} checks passed`,
   });
 
-  return finish(partial ? 'partial' : 'complete');
+  /* ---------- checklist (rules + AI) ---------- */
+  await store.updateStep(auditId, 'checklist_ai', { status: 'running', attempt: 1, error_code: null, detail: null });
+  const page = { html: capture.html, visibleText: capture.visibleText, candidates: capture.candidates };
+  const findings = runRuleChecks(page);
+  const usage = emptyUsage();
+  let aiOutcome: AiOutcome;
+  let checklistError: { code: ErrorCode; detail: string } | null = null;
+  const spentToday = await store.getAiSpendToday();
+  if (!deps.ai) {
+    aiOutcome = { kind: 'skipped', reason: 'The AI check is not configured, so this check is unsure.' };
+    checklistError = { code: 'ai_failed', detail: 'ANTHROPIC_API_KEY is not set.' };
+  } else if (spentToday >= deps.dailyAiBudgetUsd) {
+    aiOutcome = { kind: 'skipped', reason: ERROR_COPY.ai_budget_reached.message };
+    checklistError = { code: 'ai_budget_reached', detail: `Daily AI budget of $${deps.dailyAiBudgetUsd.toFixed(2)} reached.` };
+  } else {
+    try {
+      const r = await runAiChecklist(deps.ai, page, findings, capture.firstScreenPng, usage, deps.signal);
+      if (r.ok) {
+        aiOutcome = { kind: 'answered', output: r.value };
+        if (r.retried) log.warn('checklist AI output needed a retry');
+      } else {
+        aiOutcome = { kind: 'invalid', error: r.error };
+        checklistError = { code: 'ai_invalid_output', detail: r.error.slice(0, 300) };
+      }
+    } catch (e) {
+      if (deps.signal?.aborted) throw e;
+      aiOutcome = { kind: 'skipped', reason: "The AI check couldn't run, so this check is unsure." };
+      checklistError = { code: 'ai_failed', detail: (e instanceof Error ? e.message : String(e)).replace(/sk-ant-[\w-]+/g, 'sk-ant-***').slice(0, 300) };
+    }
+  }
+  const checks = mergeChecklist(page, findings, aiOutcome);
+  await store.saveCheckResults(auditId, checks);
+  if (checklistError) {
+    partial = true;
+    log.warn('checklist AI not used', { code: checklistError.code, detail: checklistError.detail });
+    await store.updateStep(auditId, 'checklist_ai', { status: 'failed', error_code: checklistError.code, detail: checklistError.detail });
+  } else {
+    const decided = checks.filter((c) => c.result !== 'unsure').length;
+    await store.updateStep(auditId, 'checklist_ai', { status: 'done', detail: `${checks.length} checks · ${decided} decided · ${checks.length - decided} unsure` });
+  }
+
+  /* ---------- score + fixes (no AI) ---------- */
+  const topAudit = (cat: 'performance' | 'accessibility') => {
+    const a = categories[cat]?.audits.find((x) => x.score !== null && x.score < 0.9);
+    return a ? `${a.title}${a.displayValue ? ` ${a.displayValue}` : ''}` : undefined;
+  };
+  const score = computeScore({ checks, performance: categories.performance?.score, accessibility: categories.accessibility?.score, seo: seo.score });
+  categories.breakdown = { categories: score.categories, missing: score.missing };
+  const fixes = buildFixes({
+    checks,
+    seoChecks: seo.checks,
+    performance: categories.performance ? { score: categories.performance.score, topAudit: topAudit('performance') } : undefined,
+    accessibility: categories.accessibility ? { score: categories.accessibility.score, topAudit: topAudit('accessibility') } : undefined,
+  });
+  await store.saveFixes(auditId, fixes);
+  await store.updateAudit(auditId, { score: score.score, category_scores: categories });
+
+  /* ---------- owner summary (AI) ---------- */
+  await store.updateStep(auditId, 'summary', { status: 'running', attempt: 1, error_code: null, detail: null });
+  let summary: string | null = null;
+  if (!deps.ai || checklistError?.code === 'ai_budget_reached' || spentToday >= deps.dailyAiBudgetUsd) {
+    await store.updateStep(auditId, 'summary', { status: 'skipped', detail: deps.ai ? ERROR_COPY.ai_budget_reached.message : 'AI not configured.' });
+  } else {
+    try {
+      const r = await runAiSummary(deps.ai, { url: capture.finalUrl, score, checks, fixes }, usage, deps.signal);
+      if (r.ok) {
+        summary = r.value;
+        await store.updateStep(auditId, 'summary', { status: 'done', detail: r.retried ? 'Valid after one retry' : null });
+      } else {
+        partial = true;
+        await store.updateStep(auditId, 'summary', { status: 'failed', error_code: 'summary_invalid', detail: r.error.slice(0, 300) });
+      }
+    } catch (e) {
+      if (deps.signal?.aborted) throw e;
+      partial = true;
+      await store.updateStep(auditId, 'summary', { status: 'failed', error_code: 'ai_failed', detail: (e instanceof Error ? e.message : String(e)).slice(0, 300) });
+    }
+  }
+
+  const aiCost = costUsd(deps.pricing, usage.inputTokens, usage.outputTokens);
+  if (usage.calls > 0) await store.addAiSpend(aiCost);
+  log.info('ai usage', { calls: usage.calls, input_tokens: usage.inputTokens, output_tokens: usage.outputTokens, cost_usd: aiCost });
+
+  return finish(partial ? 'partial' : 'complete', {
+    score: score.score,
+    summary,
+    ai_input_tokens: usage.inputTokens,
+    ai_output_tokens: usage.outputTokens,
+    ai_cost_usd: Math.round(aiCost * 1e6) / 1e6,
+  });
 }
 
 async function skipRemaining(store: Store, auditId: string, detail: string): Promise<void> {
-  for (const step of ['performance', 'accessibility', 'seo'] as const) {
+  for (const step of ['performance', 'accessibility', 'seo', 'checklist_ai', 'summary'] as const) {
     await store.updateStep(auditId, step, { status: 'skipped', detail });
   }
 }

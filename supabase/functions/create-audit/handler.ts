@@ -12,6 +12,10 @@ export interface CreateAuditDeps {
   getUserId(jwt: string): Promise<string | null>;
   resolve: Resolver;
   reserve(args: { userId: string; ipHash: string; url: string }): Promise<{ auditId: string; remaining: number }>;
+  /** The user's finished audit of this URL from the last 24h, if any. */
+  findRecent(args: { userId: string; url: string }): Promise<string | null>;
+  /** Audits left today, without using one. */
+  remaining(userId: string): Promise<number>;
   hashIp(ip: string): Promise<string>;
   allowedOrigin: string;
 }
@@ -55,6 +59,13 @@ export async function handleCreateAudit(req: Request, deps: CreateAuditDeps): Pr
 
   const norm = normaliseUrl(parsed.data.url);
   if (!norm.ok) return fail(400, 'invalid_url', norm.reason);
+
+  if (!parsed.data.force) {
+    const recent = await deps.findRecent({ userId, url: norm.url });
+    if (recent) {
+      return json(200, { ok: true, auditId: recent, normalisedUrl: norm.url, addedScheme: norm.addedScheme, remaining: await deps.remaining(userId), cached: true });
+    }
+  }
 
   const host = await checkHost(norm.hostname, deps.resolve);
   if (!host.ok) return fail(host.code === 'ssrf_blocked' ? 400 : 422, host.code);

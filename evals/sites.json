@@ -1,0 +1,4 @@
+{
+  "_comment": "15–20 real local business sites. Add entries as { \"id\": \"short-slug\", \"url\": \"https://…\" }, then run `pnpm eval:snapshot` and `pnpm eval:labels`.",
+  "sites": []
+}
